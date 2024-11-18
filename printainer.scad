@@ -4,7 +4,7 @@ include <BOSL2/threading.scad>
 /* [Container Size] */
 
 // interior radius of the container
-interior_radius = 20; // [6:125]
+inner_radius = 20; // [6:125]
 
 // interior height of the container
 interior_height = 100; // [10:250]
@@ -60,8 +60,8 @@ print_max_height = 256; // [50:500]
 
 $fn = $preview ? preview_smoothness : render_smoothness;
 
-thread_radius           = lid_toggle ? interior_radius + 3 : interior_radius; // 3 should probably be based on a ratio to fit at different sizes.
-outer_radius            = lid_toggle ? thread_radius / cos(180 / sides) : interior_radius / cos(180 / sides) ;
+thread_radius           = lid_toggle ? inner_radius + 3 : inner_radius; // 3 should probably be based on a ratio to fit at different sizes.
+outer_radius            = lid_toggle ? thread_radius / cos(180 / sides) : inner_radius / cos(180 / sides) ;
 total_radius            = outer_radius + wall;
 total_height            = lid_toggle ? interior_height + (wall * 2) : interior_height + wall;
 total_lid_height        = lid_toggle ? total_height * lid_height_percent : 0;
@@ -101,7 +101,7 @@ module dollar_bill() {
 
 module empty_space() {
     color("blue", .1)
-    cyl(l=interior_height, r=interior_radius, rounding=rounding, anchor=DOWN);
+    cyl(l=interior_height, r=inner_radius, rounding=rounding, anchor=DOWN);
 }
 
 module reference_exterior() {
@@ -137,13 +137,22 @@ module container() {
     }
 }
 
-module thread_template(internal=false) {    
-    threaded_rod(d= thread_radius * 2, height=total_lid_height - wall, pitch=pitch, internal=internal, anchor=DOWN);
+module thread_template(internal=false) {
+    dimensions=get_thread_dimensions();
+    threaded_rod(d= dimensions, height=total_lid_height - wall, pitch=pitch, internal=internal, anchor=DOWN);
 }
 
 /////////////////////////////////////////////
 // UTILITY METHODS
 /////////////////////////////////////////////
+
+function get_thread_dimensions(inner_radius=inner_radius, pitch=pitch) =
+    let (d_min = inner_radius * 2)      // Minor diameter in mm
+    let (h = 0.866 * pitch)  // Thread height based on pitch
+    let (d_major = d_min + 2 * h)  // Major diameter
+    let (d_pitch = d_major - h)      // Pitch diameter
+    [d_min, d_pitch, d_major];
+
 
 module display(reference_object=false) {
     xdistribute(spacing=total_radius * 2.2) {
@@ -166,6 +175,7 @@ module display(reference_object=false) {
         dollar_bill();
     }
 }
+
 
 module print_output() {
     container();
