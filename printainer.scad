@@ -12,10 +12,18 @@ interior_height = 100; // [10:250]
 // Amount of sides for the container
 sides = 12; // [4:64]
 
-// wall thickness
-wall = 3; // [2:10]
+// Round up outer radius to nearest mm
+round_up = true;
 
-rounding=.5;
+// Add additional thickness to the container
+side_wall_padding = 1; // [0:10]
+
+// Thickness between the empty space and top or bottom of the container
+z_wall_thickness = 3; // [2:10]
+
+// Add roundness to the top and bottom of the container
+rounding=0; // [0:10]
+
 
 /* [Lid Size] */
 
@@ -25,8 +33,10 @@ lid_toggle = true;
 // A percentage of the overall container between .1 and .5
 lid_height_percent = .2;
 
-// Thread pitch. Lower is fine. Higher is more course.
-pitch = 2; // [1:8]
+// Amount of full revolutions needed to screw on the lid
+revolutions = 4;
+
+
 
 /////////////////////////////////////////////
 
@@ -54,26 +64,51 @@ print_max_width = 256; // [50:500]
 // printer max height
 print_max_height = 256; // [50:500]
 
+/* [EXPERIMENTAL] */
+
+// How big each radius gets compared to the last
+radius_multiplier = 1.1; // [0:4:.1]
+
+
 /////////////////////////////////////////////
 
 /* [Hidden] */
 
+echo (str(""));
+echo (str("XXXXXXXXX INITIAL VARIABLES XXXXXXXXXXXXX"));
+
 $fn = $preview ? preview_smoothness : render_smoothness;
 
-thread_radius           = lid_toggle ? inner_radius + 3 : inner_radius; // 3 should probably be based on a ratio to fit at different sizes.
-outer_radius            = lid_toggle ? thread_radius / cos(180 / sides) : inner_radius / cos(180 / sides) ;
-total_radius            = outer_radius + wall;
-total_height            = lid_toggle ? interior_height + (wall * 2) : interior_height + wall;
-total_lid_height        = lid_toggle ? total_height * lid_height_percent : 0;
-total_container_height  = total_height - total_lid_height;
+total_container_height  = lid_toggle ? interior_height + (z_wall_thickness * 2) : interior_height + z_wall_thickness;
+total_lid_height        = lid_toggle ? total_container_height * lid_height_percent : 0;
+total_thread_height     = lid_toggle ? total_lid_height - z_wall_thickness : 0;
+total_base_height       = total_container_height - total_lid_height;
+
+echo (str("Total Container Height: ", total_container_height));
+echo (str("Total Lid Height: ", total_lid_height));
+echo (str("Total Thread Height: ", total_thread_height));
+echo (str("Total Base Height: ", total_base_height));
 
 
-echo ("Thread Radius: ", thread_radius);
 
-echo ("Total Radius: ", total_radius);
-echo ("Total Height: ", total_height);
-echo ("Total Lid Height: ", total_lid_height);
-echo ("Total Container Height: ", total_container_height);
+inner_container_radius = inner_radius; // from params but fits naming convention better
+inner_thread_radius = lid_toggle ? inner_container_radius * radius_multiplier : 0;
+//outer_thread_radius = lid_toggle ? (get_thread_dimensions()[2]) / 2 : 0;
+outer_thread_radius = lid_toggle ?  inner_thread_radius * radius_multiplier : 0;
+//min_outer_radius = lid_toggle ? outer_thread_radius / cos(180 / sides) : inner_container_radius + side_wall_padding;
+outer_container_radius = lid_toggle ? (outer_thread_radius / cos(180 / sides) + side_wall_padding) :  (inner_container_radius / cos(180 / sides) + side_wall_padding) ;
+total_radius = round_up ? ceil(outer_container_radius) : outer_container_radius;
+
+
+// Thread pitch. Lower is fine. Higher is more course.
+pitch = calculate_pitch(); 
+
+echo (str("Inner Container Radius: ", inner_container_radius));
+echo (str("Inner Thread Radius: ", inner_thread_radius));
+echo (str("Outer Thread Radius: ", outer_thread_radius));
+//echo (str("Min Outer Radius: ", min_outer_radius));
+echo (str("Outer Container Radius: ", outer_container_radius));
+echo (str("Total Radius: ", total_radius));
 
 
 /////////////////////////////////////////////
@@ -81,9 +116,9 @@ echo ("Total Container Height: ", total_container_height);
 /////////////////////////////////////////////
 
 // assert if the total height is greater than the printer height
-assert(total_height <= print_max_height, "Total height is greater than the printer height.");
-assert((total_radius * 2) <= print_max_width, "Total diamter is greater than the printer width.");
-assert((total_radius * 2) <= print_max_depth, "Total diamter is greater than the printer depth.");
+ assert(total_container_height <= print_max_height, "Total height is greater than the printer height.");
+ assert((total_radius * 2) <= print_max_width, "Total diamter is greater than the printer width.");
+ assert((total_radius * 2) <= print_max_depth, "Total diamter is greater than the printer depth.");
 
 
 /////////////////////////////////////////////
@@ -101,12 +136,12 @@ module dollar_bill() {
 
 module empty_space() {
     color("blue", .1)
-    cyl(l=interior_height, r=inner_radius, rounding=rounding, anchor=DOWN);
+    cyl(l=interior_height, r=inner_container_radius, anchor=DOWN);
 }
 
 module reference_exterior() {
     color("purple")
-    regular_prism(sides, r=total_radius, h=total_height, rounding2=rounding, anchor=DOWN);
+    regular_prism(sides, r=total_radius, h=total_container_height, rounding2=rounding, anchor=DOWN);
 
 }
 
@@ -115,7 +150,7 @@ module lid() {
     up(total_lid_height)
     xrot(180)
     difference () {
-        regular_prism(sides, r=total_radius, h=total_lid_height, realign=true, rounding2=rounding, anchor=DOWN);
+        regular_prism(sides, r=outer_container_radius, h=total_lid_height, realign=true, rounding2=rounding, anchor=DOWN);
         thread_template(internal=true);
     }
 }
@@ -125,45 +160,53 @@ module container() {
     difference() {
         if (lid_toggle) { 
             union() {
-                regular_prism(sides, r=total_radius, h=total_container_height, realign=true, rounding1=rounding, anchor=DOWN);
-                up(total_container_height)
+                regular_prism(sides, r=outer_container_radius, h=total_base_height, realign=true, rounding1=rounding, anchor=DOWN);
+                up(total_base_height)
                 thread_template();
             }
         } else {
-            regular_prism(sides, r=total_radius, h=total_container_height, realign=true, rounding2=rounding, anchor=DOWN);
+            regular_prism(sides, r=outer_container_radius, h=total_base_height, realign=true, rounding1=rounding, anchor=DOWN);
         }
-        up(wall)
+        up(z_wall_thickness)
+        up(.01) // delete later
         empty_space();
     }
 }
 
 module thread_template(internal=false) {
     dimensions=get_thread_dimensions();
-    threaded_rod(d= dimensions, height=total_lid_height - wall, pitch=pitch, internal=internal, anchor=DOWN);
+    threaded_rod(d=dimensions, height=total_thread_height, pitch=pitch, internal=internal, anchor=DOWN);
 }
 
 /////////////////////////////////////////////
 // UTILITY METHODS
 /////////////////////////////////////////////
 
-function get_thread_dimensions(inner_radius=inner_radius, pitch=pitch) =
-    let (d_min = inner_radius * 2)      // Minor diameter in mm
-    let (h = 0.866 * pitch)  // Thread height based on pitch
-    let (d_major = d_min + 2 * h)  // Major diameter
-    let (d_pitch = d_major - h)      // Pitch diameter
+function calculate_pitch() = (total_lid_height - z_wall_thickness) / revolutions;
+
+function get_thread_dimensions() =
+    let (pitch = calculate_pitch())
+    let (r_inner = inner_thread_radius * radius_multiplier)          // Inner radius in mm
+    //let (d_min = r_inner * 2)      // Minor diameter in mm
+    let (d_min = inner_thread_radius)      // Minor diameter in mm
+    let (h = 0.866 * pitch)             // Thread height based on pitch
+    //let (d_major = d_min + 2 * h)       // Major diameter
+    //let (d_major = d_min * 1.1)       // Major diameter
+    let (d_major = outer_thread_radius)       // Major diameter
+    let (d_pitch = d_major - h)         // Pitch diameter
     [d_min, d_pitch, d_major];
 
 
 module display(reference_object=false) {
     xdistribute(spacing=total_radius * 2.2) {
         if (lid_toggle) { thread_template(internal=true); }
-        up(wall)
+        up(z_wall_thickness)
         empty_space();
         reference_exterior();
         if (lid_toggle) {
             union() {
                 container();
-                up(total_height)
+                up(total_container_height)
                 xrot(180)
                 lid();
             }
