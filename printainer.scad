@@ -12,17 +12,11 @@ interior_height = 100; // [10:250]
 // Amount of sides for the container
 sides = 12; // [4:64]
 
-// Round up outer radius to nearest mm
-round_up = true;
-
 // Add additional thickness to the container
 side_wall_padding = 1; // [0:10]
 
 // Thickness between the empty space and top or bottom of the container
 z_wall_thickness = 3; // [2:10]
-
-// Add roundness to the top and bottom of the container
-rounding=0; // [0:10]
 
 
 /* [Lid Size] */
@@ -31,7 +25,7 @@ rounding=0; // [0:10]
 lid_toggle = true;
 
 // A percentage of the overall container between .1 and .5
-lid_height_percent = .2;
+lid_height_percent = .2;  // [.1:.5]
 
 // Amount of full revolutions needed to screw on the lid
 revolutions = 4;
@@ -67,7 +61,10 @@ print_max_height = 256; // [50:500]
 /* [EXPERIMENTAL] */
 
 // How big each radius gets compared to the last
-radius_multiplier = 1.1; // [0:4:.1]
+radius_multiplier = 1.1; // [1:4]
+
+// Not sure exactly, seems to have a big affect though.
+thread_adjustment = .5; // [0:1]
 
 
 /////////////////////////////////////////////
@@ -89,26 +86,21 @@ echo (str("Total Lid Height: ", total_lid_height));
 echo (str("Total Thread Height: ", total_thread_height));
 echo (str("Total Base Height: ", total_base_height));
 
-
+// Thread pitch. Lower is fine. Higher is more course.
+pitch = calculate_pitch(); 
 
 inner_container_radius = inner_radius; // from params but fits naming convention better
 inner_thread_radius = lid_toggle ? inner_container_radius * radius_multiplier : 0;
 //outer_thread_radius = lid_toggle ? (get_thread_dimensions()[2]) / 2 : 0;
-outer_thread_radius = lid_toggle ?  inner_thread_radius * radius_multiplier : 0;
+outer_thread_radius = lid_toggle ?  get_thread_dimensions()[2] / 2 : 0;
 //min_outer_radius = lid_toggle ? outer_thread_radius / cos(180 / sides) : inner_container_radius + side_wall_padding;
 outer_container_radius = lid_toggle ? (outer_thread_radius / cos(180 / sides) + side_wall_padding) :  (inner_container_radius / cos(180 / sides) + side_wall_padding) ;
-total_radius = round_up ? ceil(outer_container_radius) : outer_container_radius;
 
-
-// Thread pitch. Lower is fine. Higher is more course.
-pitch = calculate_pitch(); 
 
 echo (str("Inner Container Radius: ", inner_container_radius));
 echo (str("Inner Thread Radius: ", inner_thread_radius));
 echo (str("Outer Thread Radius: ", outer_thread_radius));
-//echo (str("Min Outer Radius: ", min_outer_radius));
 echo (str("Outer Container Radius: ", outer_container_radius));
-echo (str("Total Radius: ", total_radius));
 
 
 /////////////////////////////////////////////
@@ -117,8 +109,8 @@ echo (str("Total Radius: ", total_radius));
 
 // assert if the total height is greater than the printer height
  assert(total_container_height <= print_max_height, "Total height is greater than the printer height.");
- assert((total_radius * 2) <= print_max_width, "Total diamter is greater than the printer width.");
- assert((total_radius * 2) <= print_max_depth, "Total diamter is greater than the printer depth.");
+ assert((outer_container_radius * 2) <= print_max_width, "Total diamter is greater than the printer width.");
+ assert((outer_container_radius * 2) <= print_max_depth, "Total diamter is greater than the printer depth.");
 
 
 /////////////////////////////////////////////
@@ -141,7 +133,7 @@ module empty_space() {
 
 module reference_exterior() {
     color("purple")
-    regular_prism(sides, r=total_radius, h=total_container_height, rounding2=rounding, anchor=DOWN);
+    regular_prism(sides, r=outer_container_radius, h=total_container_height, rounding2=rounding, anchor=DOWN);
 
 }
 
@@ -160,15 +152,15 @@ module container() {
     difference() {
         if (lid_toggle) { 
             union() {
-                regular_prism(sides, r=outer_container_radius, h=total_base_height, realign=true, rounding1=rounding, anchor=DOWN);
                 up(total_base_height)
                 thread_template();
+                regular_prism(sides, r=outer_container_radius, h=total_base_height, realign=true, rounding1=rounding, anchor=DOWN);
             }
         } else {
             regular_prism(sides, r=outer_container_radius, h=total_base_height, realign=true, rounding1=rounding, anchor=DOWN);
         }
         up(z_wall_thickness)
-        up(.01) // delete later
+        up(.1) // delete later
         empty_space();
     }
 }
@@ -185,20 +177,15 @@ module thread_template(internal=false) {
 function calculate_pitch() = (total_lid_height - z_wall_thickness) / revolutions;
 
 function get_thread_dimensions() =
-    let (pitch = calculate_pitch())
-    let (r_inner = inner_thread_radius * radius_multiplier)          // Inner radius in mm
-    //let (d_min = r_inner * 2)      // Minor diameter in mm
-    let (d_min = inner_thread_radius)      // Minor diameter in mm
-    let (h = 0.866 * pitch)             // Thread height based on pitch
-    //let (d_major = d_min + 2 * h)       // Major diameter
-    //let (d_major = d_min * 1.1)       // Major diameter
-    let (d_major = outer_thread_radius)       // Major diameter
-    let (d_pitch = d_major - h)         // Pitch diameter
+    let (d_min = (inner_thread_radius) * 2)    
+    let (h = thread_adjustment * pitch) 
+    let (d_pitch = h + d_min)
+    let (d_major = d_min + 2 * h) 
     [d_min, d_pitch, d_major];
 
 
 module display(reference_object=false) {
-    xdistribute(spacing=total_radius * 2.2) {
+    xdistribute(spacing=outer_container_radius * 2.2) {
         if (lid_toggle) { thread_template(internal=true); }
         up(z_wall_thickness)
         empty_space();
@@ -223,7 +210,7 @@ module display(reference_object=false) {
 module print_output() {
     container();
     if (lid_toggle) {
-        right(total_radius * 2.2)
+        right(outer_container_radius * 2.2)
         lid();
     }
 
