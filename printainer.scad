@@ -18,6 +18,9 @@ side_wall_padding = 1; // [0:10]
 // Thickness between the empty space and top or bottom of the container
 z_wall_thickness = 3; // [2:10]
 
+// Add rounding to the bottom of the base and top of lid.
+rounding=10; // [0:100]
+
 
 /* [Lid Size] */
 
@@ -160,7 +163,6 @@ module container() {
             regular_prism(sides, r=outer_container_radius, h=total_base_height, realign=true, rounding1=rounding, anchor=DOWN);
         }
         up(z_wall_thickness)
-        up(.1) // delete later
         empty_space();
     }
 }
